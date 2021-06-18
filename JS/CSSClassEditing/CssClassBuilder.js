@@ -1,110 +1,121 @@
-var CssClassBuilder = function () {
+    var CssClassBuilder = function () {
         var styleSheet;
         var pub = {};
 
 
-        var constructor = function () {
+        var constructor = function (modules) {
             if (!styleSheetsExist() || !headElementExists())
                 return;
 
-                getStyleSheet();
-                if (typeof styleSheet === 'undefined') {
-                    makeStyleSheet();
+                getStyleSheet(modules);
+                if (!styleSheetDefined()) {
+                    makeStyleSheet(modules);
                 }
         }
         
         var MediaType = function (styleSheet,media) {
             var styleSheet = styleSheet;
             var media = media;
+            var prot = {};
 
-            this.mediaType = function () {
+            this.getMediaType = function () {
                 return media;
             }
-            this.styleSheet = function () {
+            this.getStyleSheet = function () {
                 return styleSheet;
             }
+
+            prot.addRuleWithVariablePrefix = function (styleSheetPrefix, selector, style) {
+                var styleSheetLength = prot.getStyleSheetLength(styleSheetPrefix);
+                for (var i = 0, l = styleSheetLength; i < l; i++) {
+                    if(styleSheetPrefix[i].selectorText && styleSheetPrefix[i].selectorText.toLowerCase()==selector.toLowerCase()) {
+                      styleSheetPrefix[i].style.cssText = style;
+                      return;
+                    }
+                }
+            }
+
+            prot.removeRuleWithVariablePrefix = function (styleSheetPrefix,selector, removeSelectorFunc) {
+                for (var i=0; i<styleSheetPrefix.length; i++) {
+                    if (styleSheetPrefix[i].selectorText.toLowerCase() === selector.toLowerCase()) {        
+                        removeSelectorFunc(i);
+                    }
+                }  
+            }
+
+            prot.getStyleSheetLength = function (styleSheetPrefix) {
+                return (styleSheetPrefix) ? styleSheetPrefix.length : 0;
+            }
+            return prot;
+        }
+
+        MediaType.isMediaType = function (styleSheet,goalMediaType,mediaPrefix) {
+            var mediaType = typeof styleSheet.media;
+            if (mediaType==goalMediaType) {
+                if (mediaPrefix === '' || (mediaPrefix.indexOf('screen') !== -1)) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         var StringMediaType = function (styleSheet) {
             var pub = {};
-            MediaType.call(pub,styleSheet,"string");
+            var prot = MediaType.call(pub,styleSheet,"string");
 
             pub.addRule = function (selector, style) {
-                for (var i = 0, l = styleSheet.rules.length; i < l; i++) {
-                    if(styleSheet.rules[i].selectorText && styleSheet.rules[i].selectorText.toLowerCase()==selector.toLowerCase()) {
-                      styleSheet.rules[i].style.cssText = style;
-                      return;
-                    }
-                  }
-                  styleSheet.addRule(selector,style);
+                prot.addRuleWithVariablePrefix(styleSheet.rules,selector,style);
+                styleSheet.addRule(selector,style);
             }
 
             pub.removeRule = function (selector) {
-                for (var i=0; i<styleSheet.rules.length; i++) {
-                    if (styleSheet.rules[i].selectorText.toLowerCase() === selector.toLowerCase()) {       
-                        styleSheet.removeRule (i);
-                    }
-                }
+                prot.removeRuleWithVariablePrefix(styleSheet.rules,selector,styleSheet.removeRule);
             }
 
             return pub;
         }
 
-        StringMediaType.isString = function (styleSheet) {
-            var media = styleSheet.media;
-            var mediaType = typeof media;
-            if (mediaType === 'string') {
-                if (media === '' || (media.indexOf('screen') !== -1)) {
-                    return true;
-                }
-            }
-            return false;
+        StringMediaType.isThisMediaType = function (styleSheet) {
+            return MediaType.isMediaType(styleSheet,"string",styleSheet.media);
+        }
+
+        StringMediaType.getInstance = function (styleSheet) {
+            return StringMediaType(styleSheet);
         }
 
         var ObjectMediaType = function (styleSheet) {
             var pub = {};
-            MediaType.call(pub,styleSheet,"object");
+            var prot = MediaType.call(pub,styleSheet,"object");
             var pub = {};
 
             pub.addRule = function (selector, style) {
-                var styleSheetLength = (styleSheet.cssRules) ? styleSheet.cssRules.length : 0;
-                for (var i = 0; i < styleSheetLength; i++) {
-                    if (styleSheet.cssRules[i].selectorText && styleSheet.cssRules[i].selectorText.toLowerCase() == selector.toLowerCase()) {
-                        styleSheet.cssRules[i].style.cssText = style;
-                        return;
-                    }
-                }
+                var styleSheetLength = prot.getStyleSheetLength();
+                prot.addRuleWithVariablePrefix(styleSheet.cssRules,selector,style);
                 styleSheet.insertRule(selector + '{' + style + '}', styleSheetLength);
             }
 
             pub.removeRule = function (selector) {
-                for (var i=0; i<styleSheet.cssRules.length; i++) {
-                    if (styleSheet.cssRules[i].selectorText.toLowerCase() === selector.toLowerCase()) {        
-                        styleSheet.deleteRule (i);
-                    }
-                }  
+                prot.removeRuleWithVariablePrefix(styleSheet.cssRules,selector,styleSheet.deleteRule);
+  
             }
             return pub;
         }
 
-        ObjectMediaType.isObject = function (styleSheet) {
-            var media = styleSheet.media;
-            var mediaType = typeof media;
-            if (mediaType=='object') {
-                if (media.mediaText === '' || (media.mediaText.indexOf('screen') !== -1)) {
-                    return true;
+        ObjectMediaType.isThisMediaType = function (styleSheet) {
+            return MediaType.isMediaType(styleSheet,"object",styleSheet.media.mediaText);
+        }
+
+        ObjectMediaType.getInstance = function (styleSheet) {
+            return ObjectMediaType(styleSheet);
+        }
+
+        var makeMediaType = function (styleSheet,modules) {
+            for (var module in modules) {
+                if (modules[module].isThisMediaType(styleSheet)){
+                    return modules[module].getInstance(styleSheet);
                 }
             }
-            return false;
-        }
-        var makeMediaType = function (styleSheet) {
-            if (StringMediaType.isString(styleSheet)) {
-                return StringMediaType(styleSheet);
-            } else if (ObjectMediaType.isObject(styleSheet)) {
-                return ObjectMediaType(styleSheet);
-            } else {
-                return undefined;
-            }
+            return undefined;
         }
 
         var styleSheetsExist = function () {
@@ -113,34 +124,36 @@ var CssClassBuilder = function () {
         var headElementExists = function () {
             return document.getElementsByTagName('head').length !== 0;
         }
-        var makeStyleSheet = function () {
+
+        var makeStyleElement = function () {
             var styleSheetElement = document.createElement('style');
             styleSheetElement.type = 'text/css';
+            return styleSheetElement;
+        }
+        var makeStyleSheet = function (modules) {
+            var styleSheetElement = makeStyleElement;
             document.getElementsByTagName('head')[0].appendChild(styleSheetElement);
         
             for (i = 0; i < document.styleSheets.length; i++) {
-              if (document.styleSheets[i].disabled) {
-                continue;
+              if (!document.styleSheets[i].disabled) {
+                styleSheet = makeMediaType(document.styleSheets[i],modules);
               }
-              styleSheet = makeMediaType(document.styleSheets[i]);
             }
             
         }
-        var getStyleSheet = function () {
+        var getStyleSheet = function (modules) {
             if (document.styleSheets.length > 0) {
-            for (var i = 0, l = document.styleSheets.length; i < l; i++) {
-                if (document.styleSheets[i].disabled) 
-                continue;
-                
-                styleSheet = makeMediaType(document.styleSheets[i]);
-
-                if (typeof styleSheet !== 'undefined') 
-                break;
-            }
+                for (var i = 0, l = document.styleSheets.length; i < l; i++) {
+                    if (!document.styleSheets[i].disabled){
+                        styleSheet = makeMediaType(document.styleSheets[i],modules);
+                        if (styleSheetDefined()) 
+                            break;
+                    }
+                }
             }
         }
         var styleSheetDefined = function () {
-            return styleSheet !== undefined;
+            return typeof styleSheet !== undefined;
         }
 
         pub.addRule = function(selector,style) {
@@ -152,6 +165,8 @@ var CssClassBuilder = function () {
             if (styleSheetDefined())
                 styleSheet.removeRule(selector);
         }
-      constructor();
-      return pub;
-      }
+
+        var modules =  [StringMediaType,ObjectMediaType];
+        constructor(modules);
+        return pub;
+    }

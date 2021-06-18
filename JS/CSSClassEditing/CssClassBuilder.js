@@ -1,3 +1,4 @@
+
     var CssClassBuilder = function () {
         var styleSheet;
         var pub = {};
@@ -131,7 +132,7 @@
             return styleSheetElement;
         }
         var makeStyleSheet = function (modules) {
-            var styleSheetElement = makeStyleElement;
+            var styleSheetElement = makeStyleElement();
             document.getElementsByTagName('head')[0].appendChild(styleSheetElement);
         
             for (i = 0; i < document.styleSheets.length; i++) {
